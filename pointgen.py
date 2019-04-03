@@ -15,7 +15,7 @@ def plot_pcd(pcd, title="", marker=".", s=3):
     plt.title(title)
     ax.scatter(pcd[:, 0], pcd[:, 1], pcd[:, 2], c=pcd[:, 3:], marker=marker, s=s)
     plt.show()
-    
+
 
 def extract_pixel_colors(img, uv):
     return np.array([img[int(uvi[1]), int(uvi[0])] for uvi in uv]) / 255
@@ -35,8 +35,8 @@ def create_point_cloud(Xs, imgs, uvs, colors=None):
             pcd[mlast:mi, 3:] = colors[i]
         mlast = mi
     return pcd
-    
-    
+
+
 def triangulate(P0, P1, u1, u2):
     X = [_triangulate(P0, P1, u1[i], u2[i]) for i in range(len(u1))]
     X = np.array([(xi / xi[-1])[:3] for xi in X])
@@ -99,19 +99,19 @@ def affine_mult(P1, P2):
     return res[:-1]
 
 
-def estimate_pose(pair1, pair2, cidx1, cidx2, X1, P3_est):#, strat="scale")
+def estimate_pose(pair1, pair2, cidx1, cidx2, X1, P3_est):
     R = P3_est[:,:-1]
     t0 = P3_est[:, -1].reshape((3, 1))
     P2 = pair1.P_2
     P2c = pair1.K @ P2
-    
+
     targets = X1[cidx1]
     r0 = cv2.Rodrigues(R)[0]
     p0 = list(r0.ravel())
     p0.extend(t0.ravel())
     u1 = pair2.u1[cidx2]
     u2 = pair2.u2[cidx2]
-    
+
     def residuals(p):
         R = cv2.Rodrigues(p[:3])[0]
         t = p[3:].reshape((3, 1))
@@ -119,7 +119,7 @@ def estimate_pose(pair1, pair2, cidx1, cidx2, X1, P3_est):#, strat="scale")
         P3c = pair2.K @ P3
         Xest = triangulate(P2c, P3c, u1, u2)
         return targets.ravel() - Xest.ravel()
-    
+
     res = least_squares(residuals, p0)
     p = res.x
     R = cv2.Rodrigues(p[:3])[0]
@@ -127,23 +127,6 @@ def estimate_pose(pair1, pair2, cidx1, cidx2, X1, P3_est):#, strat="scale")
     P = np.hstack((R, t))
     return P
 
-
-class PointCloudGenerator:
-    def __init__(self, imgs, f):
-        self.f = f
-        sift = cv2.xfeatures2d.SIFT_create()
-        self.imgs = [SiftImage(i, *sift.detectAndCompute(i, None)) for i in imgs]
-        self.pairs = []
-        for i in range(len(self.imgs) - 1):
-            p = process_img_pair(*self.imgs[i], *self.imgs[i+1], f)
-            self.pairs.append(p)
-        # Work in progress
-#         self.common_kp = []
-#         kp1 = set(self.pairs[i].matched_kp[:,2])
-#         for i in range(self.imgs-1):
-#             kp2 = set(self.pair[i+1].matched_kp[:,0])
-#             self.common_kp.append(kp1.intersection(kp2))
-        
 
 def compute_matches(des1, des2):
     bf = cv2.BFMatcher()
@@ -154,8 +137,8 @@ def compute_matches(des1, des2):
         if m.distance < 0.8*n.distance:
             good.append(m)
     return good
-    
-    
+
+
 def process_img_pair(img1, kp1, des1, img2, kp2, des2, f):
     h, w, _ = img1.shape
     good = compute_matches(des1, des2)
@@ -212,7 +195,6 @@ def process_img_pair(img1, kp1, des1, img2, kp2, des2, f):
 def get_pt_cloud(ifnames, imgs):
     h, w, _ = imgs[0].shape
     f = get_focal_length(ifnames[0], w)
-    # pcg = PointCloudGenerator(imgs[:3], f)
     sift = cv2.xfeatures2d.SIFT_create()
     simgs = [SiftImage(i, *sift.detectAndCompute(i, None)) for i in imgs[:3]]
     pairs = []
@@ -220,25 +202,23 @@ def get_pt_cloud(ifnames, imgs):
         p = process_img_pair(*simgs[i], *simgs[i+1], f)
         pairs.append(p)
     pair12, pair23 = pairs[:2]
-    
+
     common_kps, idx1, idx2 = get_common_kps(*pairs[:2])
     print(f"Common Keypoints: {len(common_kps)}")
     m1 = [pair12.matched_kps[i][1].kp for i in idx1]
     m2 = [pair23.matched_kps[i][0].kp for i in idx2]
-    print(m1 == m2)
-    
+
     P1c = pair12.K @ pair12.P_1
     P2c = pair12.K @ pair12.P_2
     X12 = triangulate(P1c, P2c, pair12.u1, pair12.u2)
-    
+
     P3_est = affine_mult(pair12.P_2, pair23.P_2)
     P3 = estimate_pose(pair12, pair23, idx1, idx2, X12, P3_est)
     P3c = pair23.K @ P3
     X23 = triangulate(P2c, P3c, pair23.u1, pair23.u2)
-    print(f"Optimized:\n{P3}")
     print(f"Estimate:\n{P3_est}")
+    print(f"Optimized:\n{P3}")
 
-    m1 = X12.shape[0]
     pcd = create_point_cloud((X12, X23), imgs[:2], (pair12.u1, pair23.u1))
-    
+
     return pcd
