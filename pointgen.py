@@ -1,5 +1,3 @@
-# Apply code to get keypoint matches
-#%matplotlib notebook
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from collections import namedtuple
@@ -11,9 +9,11 @@ from scipy.optimize import least_squares
 
 def plot_pcd(pcd, title="", marker=".", s=3):
     fig = plt.figure(figsize=(6, 6))
-    ax = fig.add_subplot(111, projection='3d', aspect="equal")
+    ax = fig.add_subplot(111, projection="3d", aspect="equal")
     plt.title(title)
-    ax.scatter(pcd[:, 0], pcd[:, 1], pcd[:, 2], c=pcd[:, 3:], marker=marker, s=s)
+    ax.scatter(
+        pcd[:, 0], pcd[:, 1], pcd[:, 2], c=pcd[:, 3:], marker=marker, s=s
+    )
     plt.show()
 
 
@@ -48,30 +48,59 @@ def _triangulate(P0, P1, x1, x2):
     # x1,x1: corresponding points in each of two images (If using P that
     # has been scaled by K, then use camera coordinates, otherwise use
     # generalized coordinates)
-    A = np.array([
-        [P0[2,0]*x1[0] - P0[0,0], P0[2,1]*x1[0] - P0[0,1], P0[2,2]*x1[0] - P0[0,2], P0[2,3]*x1[0] - P0[0,3]],
-        [P0[2,0]*x1[1] - P0[1,0], P0[2,1]*x1[1] - P0[1,1], P0[2,2]*x1[1] - P0[1,2], P0[2,3]*x1[1] - P0[1,3]],
-        [P1[2,0]*x2[0] - P1[0,0], P1[2,1]*x2[0] - P1[0,1], P1[2,2]*x2[0] - P1[0,2], P1[2,3]*x2[0] - P1[0,3]],
-        [P1[2,0]*x2[1] - P1[1,0], P1[2,1]*x2[1] - P1[1,1], P1[2,2]*x2[1] - P1[1,2], P1[2,3]*x2[1] - P1[1,3]]
-    ])
-    u,s,vt = np.linalg.svd(A)
+    A = np.array(
+        [
+            [
+                P0[2, 0] * x1[0] - P0[0, 0],
+                P0[2, 1] * x1[0] - P0[0, 1],
+                P0[2, 2] * x1[0] - P0[0, 2],
+                P0[2, 3] * x1[0] - P0[0, 3],
+            ],
+            [
+                P0[2, 0] * x1[1] - P0[1, 0],
+                P0[2, 1] * x1[1] - P0[1, 1],
+                P0[2, 2] * x1[1] - P0[1, 2],
+                P0[2, 3] * x1[1] - P0[1, 3],
+            ],
+            [
+                P1[2, 0] * x2[0] - P1[0, 0],
+                P1[2, 1] * x2[0] - P1[0, 1],
+                P1[2, 2] * x2[0] - P1[0, 2],
+                P1[2, 3] * x2[0] - P1[0, 3],
+            ],
+            [
+                P1[2, 0] * x2[1] - P1[1, 0],
+                P1[2, 1] * x2[1] - P1[1, 1],
+                P1[2, 2] * x2[1] - P1[1, 2],
+                P1[2, 3] * x2[1] - P1[1, 3],
+            ],
+        ]
+    )
+    u, s, vt = np.linalg.svd(A)
     return vt[-1]
 
 
 def get_focal_length(path, w):
     exif = piexif.load(path)
-    return exif['Exif'][piexif.ExifIFD.FocalLengthIn35mmFilm] / 36 * w
+    return exif["Exif"][piexif.ExifIFD.FocalLengthIn35mmFilm] / 36 * w
 
 
 ImgPair = namedtuple(
     "ImgPair",
     (
-        "img1", "img2", "matched_kps", "u1", "u2",
-        "x1", "x2", "E", "K", "P_1", "P_2"
-    )
+        "img1",
+        "img2",
+        "matched_kps",
+        "u1",
+        "u2",
+        "x1",
+        "x2",
+        "E",
+        "K",
+        "P_1",
+        "P_2",
+    ),
 )
-
-
 KeyPoint = namedtuple("KeyPoint", ("kp", "des"))
 SiftImage = namedtuple("SiftImage", ("img", "kp", "des"))
 
@@ -100,7 +129,7 @@ def affine_mult(P1, P2):
 
 
 def estimate_pose(pair1, pair2, cidx1, cidx2, X1, P3_est):
-    R = P3_est[:,:-1]
+    R = P3_est[:, :-1]
     t0 = P3_est[:, -1].reshape((3, 1))
     P2 = pair1.P_2
     P2c = pair1.K @ P2
@@ -133,8 +162,8 @@ def compute_matches(des1, des2):
     matches = bf.knnMatch(des1, des2, k=2)
     # Apply ratio test
     good = []
-    for i,(m,n) in enumerate(matches):
-        if m.distance < 0.8*n.distance:
+    for i, (m, n) in enumerate(matches):
+        if m.distance < 0.8 * n.distance:
             good.append(m)
     return good
 
@@ -163,11 +192,7 @@ def process_img_pair(img1, kp1, des1, img2, kp2, des2, f):
     cu = w // 2
     cv = h // 2
     # Camera matrix
-    K_cam = np.array([
-        [f, 0, cu],
-        [0, f, cv],
-        [0, 0, 1]
-    ])
+    K_cam = np.array([[f, 0, cu], [0, f, cv], [0, 0, 1]])
     K_inv = np.linalg.inv(K_cam)
     # Generalized image coords
     x1 = u1 @ K_inv.T
@@ -180,17 +205,23 @@ def process_img_pair(img1, kp1, des1, img2, kp2, des2, f):
 
     n_in, R, t, _ = cv2.recoverPose(E, x1[inliers, :2], x2[inliers, :2])
     # P_i = [R|t] with first image considered canonical
-    P_1 = np.array([
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0]
-    ])
+    P_1 = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
     P_2 = np.hstack((R, t))
     matched_kps = [k for i, k in enumerate(matched_kps) if inliers[i]]
     return ImgPair(
-        img1, img2, matched_kps, u1[inliers], u2[inliers],
-        x1[inliers], x2[inliers], E, K_cam, P_1, P_2,
+        img1,
+        img2,
+        matched_kps,
+        u1[inliers],
+        u2[inliers],
+        x1[inliers],
+        x2[inliers],
+        E,
+        K_cam,
+        P_1,
+        P_2,
     )
+
 
 def get_pt_cloud(ifnames, imgs):
     h, w, _ = imgs[0].shape
@@ -199,14 +230,12 @@ def get_pt_cloud(ifnames, imgs):
     simgs = [SiftImage(i, *sift.detectAndCompute(i, None)) for i in imgs[:3]]
     pairs = []
     for i in range(len(simgs) - 1):
-        p = process_img_pair(*simgs[i], *simgs[i+1], f)
+        p = process_img_pair(*simgs[i], *simgs[i + 1], f)
         pairs.append(p)
     pair12, pair23 = pairs[:2]
 
     common_kps, idx1, idx2 = get_common_kps(*pairs[:2])
     print(f"Common Keypoints: {len(common_kps)}")
-    m1 = [pair12.matched_kps[i][1].kp for i in idx1]
-    m2 = [pair23.matched_kps[i][0].kp for i in idx2]
 
     P1c = pair12.K @ pair12.P_1
     P2c = pair12.K @ pair12.P_2
